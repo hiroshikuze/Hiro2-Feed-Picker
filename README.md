@@ -12,6 +12,8 @@ AI(Google Gemini)を活用したRSSキュレーションツールです。Google
 
 その上で、本スクリプトはRSSフィードからキーワードに合致する記事を抽出し、AI（Gemini）による要約をLINEに通知します。
 
+![利用例](./images/example.png)
+
 ## 稼働環境
 
 * （事前に必要なシートを用意された）スプレッドシートにひもづくGAS (=Google Apps Script)
