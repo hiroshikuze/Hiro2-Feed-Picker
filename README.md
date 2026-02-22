@@ -1,4 +1,4 @@
-# Hiro2-Feed-Picker
+# Hiro2 Feed picker
 
 An AI-powered RSS curation tool for Google Apps Script and Google Sheets. Filters articles by keywords and delivers summaries to LINE.
 
