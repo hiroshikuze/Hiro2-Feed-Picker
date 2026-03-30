@@ -197,11 +197,27 @@ const getUserIdsFromSheet = () => {
 /**
  * 指定されたRSSフィードから記事を取得し、キーワードでフィルタリングする。
  * @param {string[]} urls - RSSフィードのURLの配列。
- * @param {string[]} keywords - 記事のタイトルまたは内容に含まれるべきキーワードの配列。
+ * @param {string[]} keywords - フィルタリングに使用するキーワードの配列。
+ *   先頭が `-` のキーワードはマイナスキーワード（除外条件）として扱われる。
+ *   例: `["ケーキ", "-バナナ"]` → 「ケーキ」を含み、かつ「バナナ」を含まない記事のみ抽出。
+ *   `-` 単体（スライス後に空文字になるもの）は無視する。
  * @returns {Array<{title: string, description: string, link: string}>} フィルタリングされた記事の配列。
  */
 const fetchAndFilterRss = (urls, keywords) => {
   const filtered = [];
+
+  // キーワードを正（含む）と負（除外）に分類する
+  // "-" 単体（スライス後に空文字になるもの）は無視する
+  const positiveKeywords = keywords.filter(k => !k.startsWith('-'));
+  const negativeKeywords = keywords
+    .filter(k => k.startsWith('-'))
+    .map(k => k.slice(1))
+    .filter(k => k.length > 0);
+
+  if (positiveKeywords.length === 0) {
+    sendOwnerNotigication('keywordsシートに正のキーワードがありません');
+    return filtered;
+  }
 
   urls.forEach(url => {
     try {
@@ -231,11 +247,12 @@ const fetchAndFilterRss = (urls, keywords) => {
         // 1. 公開日が過去24時間以内であること
         if (pubDate < oneDayAgo) return;
 
-        // 2. キーワードに一致すること
+        // 2. キーワードに一致すること（正キーワードが1つ以上含まれ、マイナスキーワードを含まない）
         const content = (title + description).toLowerCase();
-        const isMatch = keywords.some(keyword => content.includes(keyword.toLowerCase()));
+        const isMatch = positiveKeywords.some(keyword => content.includes(keyword.toLowerCase()));
+        const isExcluded = negativeKeywords.some(keyword => content.includes(keyword.toLowerCase()));
 
-        if (isMatch) {
+        if (isMatch && !isExcluded) {
           filtered.push({ title, description, link });
         }
       });
