@@ -2,71 +2,54 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## セッション開始時の必須確認
+
+`.claude/revision_log.md` を読み、過去のミスパターンを把握してから作業を始める。
+
+## 最重要原則
+
+### 1. Plan Mode Default
+3ステップ以上のタスクは実装前に計画を提示し、承認を得てから進む。
+- **判定**: 変更ファイルが2つ以上 or 関数を新規追加する場合 → 計画を先に提示したか？
+
+### 2. Self-Improvement Loop
+ミスのパターンを `.claude/revision_log.md` に記録し、毎セッション冒頭で読み返す。
+- **判定**: 誤った実装・誤解釈・見落としが発生した → revision_log.md に追記したか？
+
+### 3. Verification Before Done
+完了前に「スタッフエンジニアが承認するレベルか」を自問する。
+- **判定**: 変更後に自分でコードを読み直し、意図しない副作用がないことを確認したか？
+
+### 4. Subagent Strategy
+リサーチ・分析はサブエージェントに委譲し、メインコンテキストを保全する。
+- **判定**: 調査対象が3ファイル以上 or 横断的な検索が必要 → Explore/Plan サブエージェントを使ったか？
+
+### 5. Demand Elegance
+設計判断を含む変更では、力技の前に2〜3のアプローチを比較検討する（細かい修正は除く）。
+- **判定**: 新機能・アーキテクチャ変更のとき → 複数案を提示したか？
+
+### 6. Autonomous Bug Fixing
+バグ報告時はまず自律的に調査・修正し、設計判断のみ確認を取る。
+- **判定**: バグ修正で「どうすればいいですか？」と聞く前に、原因を特定して修正案を持っているか？
+
+---
+
 ## プロジェクト概要
 
 Google Apps Script (GAS) で動作するRSSキュレーションツール。スプレッドシートの設定に基づき、RSSフィードからキーワードにマッチする記事を抽出し、Gemini APIで要約してLINE Messaging APIで通知する。
 
-## デプロイ方法
+ファイルは `main.js` と `appsscript.json` の2つのみ。
 
-このリポジトリはGASプロジェクトと clasp で連携する。ローカル編集後は以下でGASに反映する：
+## デプロイ
 
 ```bash
 npx clasp push
 ```
 
-実行・テストはGASエディタ上で `main` 関数を手動実行するか、スプレッドシートに紐づくGASのトリガーを使う。ローカルで単体テストを実行する仕組みは存在しない。
+ローカルでテストを実行する仕組みは存在しない。テストはGASエディタ上で `main` 関数を手動実行する。`.clasp.json`・`.clasprc.json` は `.gitignore` 対象。
 
-`.clasp.json`（プロジェクトID含む）と `.clasprc.json`（認証情報）は `.gitignore` でコミット除外されている。
+## 詳細ルール
 
-## コードアーキテクチャ
-
-ファイルは `main.js` と `appsscript.json` の2つのみ。
-
-### 処理フロー（`main.js`）
-
-```
-main()
-  ├── getRssUrlFromSheet()       // スプレッドシート「RSS」シートのB列からURL取得
-  ├── getKeywordsFromSheet()     // 「keywords」シートのA列からキーワード取得
-  ├── fetchAndFilterRss()        // RSSフェッチ＋キーワードフィルタリング
-  ├── getGeminiSummaryOfArticles() // Gemini APIで記事を要約
-  ├── getUserIdsFromSheet()      // 「userId」シートのA列からLINEユーザーID取得
-  └── sendLineNotification()    // LINE Messaging API multicastで一斉送信
-```
-
-エラーは基本的に `sendOwnerNotification()` でオーナーのLINEに通知する。
-
-### スプレッドシートのシート構成
-
-| シート名 | 用途 |
-|----------|------|
-| `RSS` | B列にRSSフィードURL（A列はラベル任意） |
-| `keywords` | A列にキーワード。先頭 `-` でマイナスキーワード（除外） |
-| `userId` | A列にLINEユーザーID。Webhook経由で自動追加 |
-
-### キーワードフィルタリングのルール
-
-- 正キーワード：記事タイトル＋説明のいずれかに1つでも含まれればマッチ（OR条件）
-- マイナスキーワード（`-`プレフィックス）：含まれる記事を除外
-- `-` 単体は無視される
-- 正キーワードが0件の場合、オーナーに通知して処理を終了
-
-### スクリプトプロパティ（GAS管理画面で設定）
-
-| キー | 内容 |
-|------|------|
-| `GEMINI_API_KEY` | Google Gemini APIキー |
-| `GEMINI_PROMPT` | Geminiへの追加プロンプト（読者属性・関心など） |
-| `LINE_ACCESS_TOKEN` | LINEチャネルアクセストークン |
-| `LINE_OWNER_USER_ID` | 管理者のLINEユーザーID |
-
-### Webhookエントリポイント
-
-`doPost(e)` がLINEからのWebhookを受け取る。友だち追加イベント時にユーザーIDを `userId` シートへ自動登録する。`appsscript.json` でウェブアプリとして `ANYONE_ANONYMOUS` 公開設定済み。
-
-### LINE出力のテキスト整形
-
-Geminiのレスポンスに含まれるMarkdown記法をLINE向けに変換している（`getGeminiSummaryOfArticles` 末尾）：
-- `**bold**` → `"bold"`
-- `###` → `■`
-- `` `https://...` `` → `https://...`
+- アーキテクチャ・処理フロー → `.claude/rules/architecture.md`
+- コーディング規約 → `.claude/rules/coding.md`
+- Git ワークフロー → `.claude/rules/git.md`
