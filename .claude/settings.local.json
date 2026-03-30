@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /home/hiroshikuze/.claude -name *.json)",
+      "Read(//mnt/c/Users/**)",
+      "Bash(grep -r \"stop-hook\" /home/hiroshikuze/.claude/settings*.json /mnt/c/local-documents/github/Hiro2-Feed-Picker/.claude/settings*.json)",
+      "Bash(ls /home/hiroshikuze/.claude/settings*)",
+      "Bash(ls /mnt/c/local-documents/github/Hiro2-Feed-Picker/.claude/settings*)",
+      "Bash(find /mnt/c/Users -name settings.json -path *Claude*)",
+      "Read(//mnt/c/local-documents/**)",
+      "Read(//home/hiroshikuze/**)",
+      "Bash(echo $USERPROFILE)",
+      "Bash(echo $APPDATA)",
+      "Read(//mnt/**)",
+      "Bash(cmd.exe /c \"echo %APPDATA%\")",
+      "Bash(powershell.exe -Command \"[System.Environment]::GetFolderPath\\(''ApplicationData''\\)\")",
+      "Bash(find /mnt/c/Users/kuze_/AppData/Roaming -name settings*.json -path *Claude*)",
+      "Bash(find /mnt/c/Users/kuze_/AppData/Roaming/Claude -name *.json)",
+      "Bash(ls /mnt/c/Users/kuze_/.claude/settings*)",
+      "Bash(find /home/hiroshikuze/.claude /mnt/c/local-documents/github/Hiro2-Feed-Picker -name *.json -not -path */sessions/* -not -path *jsonl*)",
+      "Bash(find /home/hiroshikuze/.claude -name hooks.json -o -name *.local.md)",
+      "Bash(xargs ls:*)",
+      "Bash(find /mnt/c/local-documents/github/Hiro2-Feed-Picker -name *.local.md)",
+      "Bash(find /mnt/c/local-documents -name settings*.json)",
+      "Bash(for d:*)",
+      "Bash(do echo:*)",
+      "Read(//mnt/c/local-documents/github/Hiro2-Feed-Picker/**)",
+      "Bash(done)",
+      "Bash(ls -t /home/hiroshikuze/.claude/debug/*.txt)",
+      "Bash(find /mnt/c/local-documents/github/Hiro2-Feed-Picker -name *.json)",
+      "Bash(xargs -I{} grep -l \"stop-hook-git-check\\\\|3b3bc643\\\\|Hiro2-Feed-Picker\" {})",
+      "Bash(ls -lt /home/hiroshikuze/.claude/debug/*.txt)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
