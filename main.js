@@ -31,12 +31,12 @@ const main = () => {
 
     if (rssUrls.length === 0) {
       // URLがない場合は処理を中断
-      sendOwnerNotigication('「RSS」シートにURLが設定されていません。処理を中断します。');
+      sendOwnerNotification('「RSS」シートにURLが設定されていません。処理を中断します。');
       return;
     }
     if (targetKeywords.length === 0) {
       // キーワードがない場合は処理を中断
-      sendOwnerNotigication('「キーワード」シートに通知キーワードが設定されていません。処理を中断します。');
+      sendOwnerNotification('「キーワード」シートに通知キーワードが設定されていません。処理を中断します。');
       return;
     }
     Logger.log("1:OK");
@@ -45,7 +45,7 @@ const main = () => {
     const filteredArticles = fetchAndFilterRss(rssUrls, targetKeywords);
 
     if (filteredArticles.length === 0) {
-      // sendOwnerNotigication('該当する新しい記事はありませんでした。');
+      // sendOwnerNotification('該当する新しい記事はありませんでした。');
       Logger.log('該当する新しい記事はありませんでした。');
       return;
     }
@@ -65,12 +65,12 @@ const main = () => {
       notifications.forEach(msg => {
         sendLineNotification(userIds, msg);
       });
-      sendOwnerNotigication(`${filteredArticles.length}件、${userIds.length}名に送信しました。`);
+      sendOwnerNotification(`${filteredArticles.length}件、${userIds.length}名に送信しました。`);
     }
     Logger.log("5:OK");
   } catch (error) {
     const message = 'メイン処理中にエラーが発生しました: ' + error.toString();
-    sendOwnerNotigication(message);
+    sendOwnerNotification(message);
   }
 };
 
@@ -87,8 +87,8 @@ const doPost = (e) => {
     return;
   }
 
-  sendOwnerNotigication(JSON.stringify(e));
-  // sendOwnerNotigication(`reply_token:${reply_token}\nmessageId:${messageId}\nmessageType:${messageType}\nmessageText:${messageText}\userId:${userId}\n`);
+  sendOwnerNotification(JSON.stringify(e));
+  // sendOwnerNotification(`reply_token:${reply_token}\nmessageId:${messageId}\nmessageType:${messageType}\nmessageText:${messageText}\userId:${userId}\n`);
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("userId");
@@ -109,7 +109,7 @@ const doPost = (e) => {
   // 重複しない場合のみ追加
   if (!isDuplicate) {
     sheet.appendRow([userId]); // 末尾に新しい行として追加
-    sendOwnerNotigication(`新ユーザー追加しました:${userId}`);
+    sendOwnerNotification(`新ユーザー追加しました:${userId}`);
     sendLineNotification([userId], "はじめまして、新規ユーザー登録を行いました。よろしくお願いいたします。");
   } else {
     sendLineNotification([userId], "既に登録済みです。");
@@ -148,7 +148,7 @@ const getKeywordsFromSheet = () => {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('keywords');
   if (!sheet) {
-    sendOwnerNotigication('「keywords」シートが見つかりません。キーワードなしで続行します。');
+    sendOwnerNotification('「keywords」シートが見つかりません。キーワードなしで続行します。');
     return [];
   }
 
@@ -215,7 +215,7 @@ const fetchAndFilterRss = (urls, keywords) => {
     .filter(k => k.length > 0);
 
   if (positiveKeywords.length === 0) {
-    sendOwnerNotigication('keywordsシートに正のキーワードがありません');
+    sendOwnerNotification('keywordsシートに正のキーワードがありません');
     return filtered;
   }
 
@@ -310,10 +310,10 @@ const getGeminiSummaryOfArticles = (articles) => {
   if (json.candidates && json.candidates[0] && json.candidates[0].content) {
     return json.candidates[0].content.parts[0].text.trim().replace(/\*\*/g, '"').replace(/###/g, '■').replace(/`(https?:\/\/[^\s`]+)`/g, '$1');
   } else if (json.error) {
-    sendOwnerNotigication('Gemini APIエラー: ' + json.error.message);
+    sendOwnerNotification('Gemini APIエラー: ' + json.error.message);
     return '（要約エラーが発生しました。）';
   } else {
-    sendOwnerNotigication('Gemini APIから予期しない応答: ' + response.getContentText());
+    sendOwnerNotification('Gemini APIから予期しない応答: ' + response.getContentText());
     return '（要約できませんでした。）';
   }
 };
@@ -354,7 +354,7 @@ const sendLineNotification = (userIds, message) => {
  * 管理者向けにメッセージを送信しログに記録
  * @param {string} message - 送信するテキストメッセージ。
  */
-const sendOwnerNotigication = (message) => {
+const sendOwnerNotification = (message) => {
   const LINE_OWNER_USER_ID = [getProperty('LINE_OWNER_USER_ID')];
 
   Logger.log(message);

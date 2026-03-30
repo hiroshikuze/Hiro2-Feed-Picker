@@ -34,7 +34,7 @@ main()
   └── sendLineNotification()    // LINE Messaging API multicastで一斉送信
 ```
 
-エラーは基本的に `sendOwnerNotigication()` でオーナーのLINEに通知する（typoのまま維持すること）。
+エラーは基本的に `sendOwnerNotification()` でオーナーのLINEに通知する。
 
 ### スプレッドシートのシート構成
 
