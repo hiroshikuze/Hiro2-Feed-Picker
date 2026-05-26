@@ -240,7 +240,8 @@ const fetchAndFilterRss = (urls, keywords) => {
       Logger.log("d");
       items.forEach(item => {
         const title = item.getChildText('title');
-        const description = item.getChildText('description');
+        const rawDescription = item.getChildText('description') || '';
+        const description = rawDescription.replace(/<[^>]*>/g, '').trim().slice(0, 150);
         const link = item.getChildText('link');
         const pubDate = new Date(item.getChildText('pubDate'));
 
