@@ -309,7 +309,7 @@ const getGeminiSummaryOfArticles = (articles) => {
   const json = JSON.parse(response.getContentText());
 
   if (json.candidates && json.candidates[0] && json.candidates[0].content) {
-    return json.candidates[0].content.parts[0].text.trim().replace(/\*\*/g, '"').replace(/###/g, '■').replace(/`(https?:\/\/[^\s`]+)`/g, '$1');
+    return json.candidates[0].content.parts[0].text.trim().replace(/\*\*/g, '').replace(/###/g, '■').replace(/`(https?:\/\/[^\s`]+)`/g, '$1');
   } else if (json.error) {
     sendOwnerNotification('Gemini APIエラー: ' + json.error.message);
     return '（要約エラーが発生しました。）';
