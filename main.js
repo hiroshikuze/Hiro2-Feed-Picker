@@ -294,7 +294,10 @@ const getGeminiSummaryOfArticles = (articles) => {
       }
     ],
     generationConfig: {
-      temperature: 0.5
+      temperature: 0.5,
+      thinkingConfig: {
+        thinkingBudget: 0
+      }
     }
   };
 
