@@ -311,6 +311,8 @@ const getGeminiSummaryOfArticles = (articles) => {
   const response = UrlFetchApp.fetch(API_URL, options);
   const json = JSON.parse(response.getContentText());
 
+  Logger.log('token usage: ' + JSON.stringify(json.usageMetadata));
+
   if (json.candidates && json.candidates[0] && json.candidates[0].content) {
     return json.candidates[0].content.parts[0].text.trim().replace(/\*\*/g, '').replace(/###/g, '■').replace(/`(https?:\/\/[^\s`]+)`/g, '$1');
   } else if (json.error) {
