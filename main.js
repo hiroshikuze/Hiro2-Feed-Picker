@@ -314,7 +314,7 @@ const getGeminiSummaryOfArticles = (articles) => {
   Logger.log('token usage: ' + JSON.stringify(json.usageMetadata));
 
   if (json.candidates && json.candidates[0] && json.candidates[0].content) {
-    return json.candidates[0].content.parts[0].text.trim().replace(/\*\*/g, '').replace(/###/g, '■').replace(/`(https?:\/\/[^\s`]+)`/g, '$1');
+    return json.candidates[0].content.parts[0].text.trim().replace(/\*\*/g, '').replace(/###/g, '■').replace(/`(https?:\/\/[^\s`]+)`/g, '$1').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1 $2');
   } else if (json.error) {
     sendOwnerNotification('Gemini APIエラー: ' + json.error.message);
     return '（要約エラーが発生しました。）';
