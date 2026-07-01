@@ -194,6 +194,26 @@ const getUserIdsFromSheet = () => {
   return uniqueUserIds;
 };
 
+const REDIRECT_URL_PATTERNS = [
+  /^https:\/\/news\.google\.com\//,
+];
+
+/**
+ * リダイレクトURLを最終URLに解決する。パターン非該当のURLはそのまま返す。
+ * @param {string} url - 元のURL。
+ * @returns {string} リダイレクト先URL。解決できない場合は元のURLを返す。
+ */
+const resolveRedirectUrl = (url) => {
+  if (!REDIRECT_URL_PATTERNS.some(pattern => pattern.test(url))) return url;
+  try {
+    const res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true });
+    const headers = res.getHeaders();
+    return headers['Location'] || headers['location'] || url;
+  } catch (e) {
+    return url;
+  }
+};
+
 /**
  * 指定されたRSSフィードから記事を取得し、キーワードでフィルタリングする。
  * @param {string[]} urls - RSSフィードのURLの配列。
@@ -242,7 +262,7 @@ const fetchAndFilterRss = (urls, keywords) => {
         const title = item.getChildText('title');
         const rawDescription = item.getChildText('description') || '';
         const description = rawDescription.replace(/<[^>]*>/g, '').trim().slice(0, 150);
-        const link = item.getChildText('link');
+        const link = resolveRedirectUrl(item.getChildText('link'));
         const pubDate = new Date(item.getChildText('pubDate'));
 
         // 1. 公開日が過去24時間以内であること
