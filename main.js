@@ -305,6 +305,25 @@ const fetchAndFilterRss = (urls, keywords) => {
     return filtered;
   }
 
+  // 失敗したURLだけ1回リトライ
+  const failedIndices = [];
+  responses.forEach((res, i) => {
+    try {
+      if (res.getResponseCode() >= 400) failedIndices.push(i);
+    } catch (e) {
+      failedIndices.push(i);
+    }
+  });
+  if (failedIndices.length > 0) {
+    Utilities.sleep(1000);
+    try {
+      const retryResponses = UrlFetchApp.fetchAll(failedIndices.map(i => ({ url: urls[i], muteHttpExceptions: true })));
+      retryResponses.forEach((res, j) => { responses[failedIndices[j]] = res; });
+    } catch (e) {
+      Logger.log('リトライfetchAll全体でエラーが発生しました: ' + e.toString());
+    }
+  }
+
   const oneDayAgo = new Date();
   oneDayAgo.setDate(oneDayAgo.getDate() - 1); // 過去24時間以内の記事のみを対象
 
