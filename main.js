@@ -272,40 +272,20 @@ const resolveRedirectUrl = (url) => {
 };
 
 /**
- * 指定されたRSSフィードから記事を取得し、キーワードでフィルタリングする。
- * @param {string[]} urls - RSSフィードのURLの配列。
- * @param {string[]} keywords - フィルタリングに使用するキーワードの配列。
- *   先頭が `-` のキーワードはマイナスキーワード（除外条件）として扱われる。
- *   例: `["ケーキ", "-バナナ"]` → 「ケーキ」を含み、かつ「バナナ」を含まない記事のみ抽出。
- *   `-` 単体（スライス後に空文字になるもの）は無視する。
- * @returns {Array<{title: string, description: string, link: string}>} フィルタリングされた記事の配列。
+ * 複数URLを並列フェッチし、失敗分のみ1回リトライして結果を返す。
+ * @param {string[]} urls - フェッチするURLの配列。
+ * @returns {HTTPResponse[]} レスポンスの配列（urlsと同順）。
  */
-const fetchAndFilterRss = (urls, keywords) => {
-  const filtered = [];
-
-  // キーワードを正（含む）と負（除外）に分類する
-  // "-" 単体（スライス後に空文字になるもの）は無視する
-  const positiveKeywords = keywords.filter(k => !k.startsWith('-'));
-  const negativeKeywords = keywords
-    .filter(k => k.startsWith('-'))
-    .map(k => k.slice(1))
-    .filter(k => k.length > 0);
-
-  if (positiveKeywords.length === 0) {
-    sendOwnerNotification('keywordsシートに正のキーワードがありません');
-    return filtered;
-  }
-
+const fetchAllWithRetry = (urls) => {
   const requests = urls.map(url => ({ url, muteHttpExceptions: true }));
   let responses;
   try {
     responses = UrlFetchApp.fetchAll(requests);
   } catch (error) {
     Logger.log('fetchAll全体でエラーが発生しました: ' + error.toString());
-    return filtered;
+    return urls.map(() => null);
   }
 
-  // 失敗したURLだけ1回リトライ
   const failedIndices = [];
   responses.forEach((res, i) => {
     try {
@@ -323,43 +303,70 @@ const fetchAndFilterRss = (urls, keywords) => {
       Logger.log('リトライfetchAll全体でエラーが発生しました: ' + e.toString());
     }
   }
+  return responses;
+};
 
+/**
+ * RSSのitem要素配列をキーワード・日付でフィルタリングして記事を返す。
+ * @param {Element[]} items - RSSのitem要素の配列。
+ * @param {string[]} positiveKeywords - 正キーワードの配列。
+ * @param {string[]} negativeKeywords - マイナスキーワードの配列。
+ * @param {Date} oneDayAgo - この日時より古い記事を除外する基準日時。
+ * @returns {Array<{title: string, description: string, link: string}>} マッチした記事の配列。
+ */
+const filterRssItems = (items, positiveKeywords, negativeKeywords, oneDayAgo) => {
+  const filtered = [];
+  items.forEach(item => {
+    const title = item.getChildText('title');
+    const rawDescription = item.getChildText('description') || '';
+    const description = rawDescription.replace(/<[^>]*>/g, '').trim().slice(0, 150);
+    const link = resolveRedirectUrl(item.getChildText('link'));
+    const pubDate = new Date(item.getChildText('pubDate'));
+
+    if (pubDate < oneDayAgo) return;
+
+    const content = (title + description).toLowerCase();
+    const isMatch = positiveKeywords.some(keyword => content.includes(keyword.toLowerCase()));
+    const isExcluded = negativeKeywords.some(keyword => content.includes(keyword.toLowerCase()));
+
+    if (isMatch && !isExcluded) {
+      filtered.push({ title, description, link });
+    }
+  });
+  return filtered;
+};
+
+/**
+ * 指定されたRSSフィードから記事を取得し、キーワードでフィルタリングする。
+ * @param {string[]} urls - RSSフィードのURLの配列。
+ * @param {string[]} keywords - フィルタリングに使用するキーワードの配列。
+ *   先頭が `-` のキーワードはマイナスキーワード（除外条件）として扱われる。
+ *   `-` 単体（スライス後に空文字になるもの）は無視する。
+ * @returns {Array<{title: string, description: string, link: string}>} フィルタリングされた記事の配列。
+ */
+const fetchAndFilterRss = (urls, keywords) => {
+  const positiveKeywords = keywords.filter(k => !k.startsWith('-'));
+  const negativeKeywords = keywords.filter(k => k.startsWith('-')).map(k => k.slice(1)).filter(k => k.length > 0);
+
+  if (positiveKeywords.length === 0) {
+    sendOwnerNotification('keywordsシートに正のキーワードがありません');
+    return [];
+  }
+
+  const responses = fetchAllWithRetry(urls);
   const oneDayAgo = new Date();
-  oneDayAgo.setDate(oneDayAgo.getDate() - 1); // 過去24時間以内の記事のみを対象
+  oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+  const filtered = [];
 
   responses.forEach((response, i) => {
     try {
-      if (response.getResponseCode() >= 400) {
-        Logger.log(`${urls[i]}: HTTPエラー ${response.getResponseCode()}`);
+      if (!response || response.getResponseCode() >= 400) {
+        Logger.log(`${urls[i]}: HTTPエラー`);
         return;
       }
-      const feedText = response.getContentText().trim();
-      const document = XmlService.parse(feedText);
-      const root = document.getRootElement();
-      const channel = root.getChild('channel');
-
+      const channel = XmlService.parse(response.getContentText().trim()).getRootElement().getChild('channel');
       if (channel === null) return;
-      const items = channel.getChildren('item');
-
-      items.forEach(item => {
-        const title = item.getChildText('title');
-        const rawDescription = item.getChildText('description') || '';
-        const description = rawDescription.replace(/<[^>]*>/g, '').trim().slice(0, 150);
-        const link = resolveRedirectUrl(item.getChildText('link'));
-        const pubDate = new Date(item.getChildText('pubDate'));
-
-        // 1. 公開日が過去24時間以内であること
-        if (pubDate < oneDayAgo) return;
-
-        // 2. キーワードに一致すること（正キーワードが1つ以上含まれ、マイナスキーワードを含まない）
-        const content = (title + description).toLowerCase();
-        const isMatch = positiveKeywords.some(keyword => content.includes(keyword.toLowerCase()));
-        const isExcluded = negativeKeywords.some(keyword => content.includes(keyword.toLowerCase()));
-
-        if (isMatch && !isExcluded) {
-          filtered.push({ title, description, link });
-        }
-      });
+      filtered.push(...filterRssItems(channel.getChildren('item'), positiveKeywords, negativeKeywords, oneDayAgo));
     } catch (error) {
       Logger.log(`fetchAndFilterRssでエラーが発生しました(${urls[i]}): ` + error.toString());
     }
