@@ -10,6 +10,7 @@
  * @type {string}
  */
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/multicast';
+const SENT_ARTICLE_URL_LIMIT = 100;
 
 /**
  * プロジェクトの設定（スクリプトプロパティ）から指定されたキーの値を取得する。
@@ -18,6 +19,32 @@ const LINE_API_URL = 'https://api.line.me/v2/bot/message/multicast';
  */
 const getProperty = (key) => {
   return PropertiesService.getScriptProperties().getProperty(key);
+};
+
+/**
+ * 送信済み記事URLをスクリプトプロパティから取得する。
+ * @returns {string[]} 送信済みURLの配列。
+ */
+const getSentArticleUrls = () => {
+  try {
+    const raw = getProperty('SENT_ARTICLE_URLS');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    sendOwnerNotification('SENT_ARTICLE_URLSの読み込みに失敗しました: ' + e.toString());
+    return [];
+  }
+};
+
+/**
+ * 送信済み記事URLをスクリプトプロパティに保存する。
+ * @param {string[]} urls - 保存するURLの配列。
+ */
+const saveSentArticleUrls = (urls) => {
+  try {
+    PropertiesService.getScriptProperties().setProperty('SENT_ARTICLE_URLS', JSON.stringify(urls.slice(-SENT_ARTICLE_URL_LIMIT)));
+  } catch (e) {
+    sendOwnerNotification('SENT_ARTICLE_URLSの保存に失敗しました（上限超過の可能性）: ' + e.toString());
+  }
 };
 
 /**
@@ -51,9 +78,18 @@ const main = () => {
     }
     Logger.log("2:OK");
 
+    // 送信済みURLを除外
+    const sentUrls = new Set(getSentArticleUrls());
+    const newArticles = filteredArticles.filter(a => !sentUrls.has(a.link));
+
+    if (newArticles.length === 0) {
+      Logger.log('新しい記事はありませんでした（すべて送信済み）。');
+      return;
+    }
+
     // 3. 記事の要約と通知メッセージの作成
     const notifications = [];
-    notifications.push(`📰 今日のネタ 📰\n\n${getGeminiSummaryOfArticles(filteredArticles)}`);
+    notifications.push(`📰 今日のネタ 📰\n\n${getGeminiSummaryOfArticles(newArticles)}`);
     Logger.log("3:OK");
 
     // 4. 通知先IDをシートから取得
@@ -65,7 +101,8 @@ const main = () => {
       notifications.forEach(msg => {
         sendLineNotification(userIds, msg);
       });
-      sendOwnerNotification(`${filteredArticles.length}件、${userIds.length}名に送信しました。`);
+      saveSentArticleUrls([...sentUrls, ...newArticles.map(a => a.link)]);
+      sendOwnerNotification(`${newArticles.length}件、${userIds.length}名に送信しました。`);
     }
     Logger.log("5:OK");
   } catch (error) {
