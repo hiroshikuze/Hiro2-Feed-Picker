@@ -48,6 +48,26 @@ const saveSentArticleUrls = (urls) => {
 };
 
 /**
+ * ネットワークエラーや5xxレスポンス時に指数バックオフでリトライするfetchラッパー。
+ * @param {string} url - リクエスト先URL。
+ * @param {Object} options - UrlFetchApp.fetchのオプション。
+ * @param {number} maxRetries - 最大試行回数（デフォルト3）。
+ * @returns {HTTPResponse} レスポンス。
+ */
+const fetchWithRetry = (url, options = {}, maxRetries = 3) => {
+  const opts = { ...options, muteHttpExceptions: true };
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = UrlFetchApp.fetch(url, opts);
+      if (res.getResponseCode() < 500 || i === maxRetries - 1) return res;
+    } catch (e) {
+      if (i === maxRetries - 1) throw e;
+    }
+    Utilities.sleep(1000 * Math.pow(2, i));
+  }
+};
+
+/**
  * メイン関数、RSSフィードから記事を取得し、フィルタリング、要約、LINE通知までの一連の処理を実行する
  */
 const main = () => {
@@ -365,7 +385,7 @@ const getGeminiSummaryOfArticles = (articles) => {
     muteHttpExceptions: true
   };
 
-  const response = UrlFetchApp.fetch(API_URL, options);
+  const response = fetchWithRetry(API_URL, options);
   const json = JSON.parse(response.getContentText());
 
   Logger.log('token usage: ' + JSON.stringify(json.usageMetadata));
@@ -410,7 +430,7 @@ const sendLineNotification = (userIds, message) => {
   };
 
   Logger.log(options)
-  UrlFetchApp.fetch(LINE_API_URL, options);
+  fetchWithRetry(LINE_API_URL, options);
 };
 
 /**
