@@ -296,25 +296,32 @@ const fetchAndFilterRss = (urls, keywords) => {
     return filtered;
   }
 
-  urls.forEach(url => {
+  const requests = urls.map(url => ({ url, muteHttpExceptions: true }));
+  let responses;
+  try {
+    responses = UrlFetchApp.fetchAll(requests);
+  } catch (error) {
+    Logger.log('fetchAll全体でエラーが発生しました: ' + error.toString());
+    return filtered;
+  }
+
+  const oneDayAgo = new Date();
+  oneDayAgo.setDate(oneDayAgo.getDate() - 1); // 過去24時間以内の記事のみを対象
+
+  responses.forEach((response, i) => {
     try {
-      Logger.log(`${url}:${keywords}`);
-      const feedText = UrlFetchApp.fetch(url).getContentText().trim();
-      Logger.log("a");
-      Logger.log(feedText);
-      const document = XmlService.parse(feedText); // 修正後のテキストをパース
+      if (response.getResponseCode() >= 400) {
+        Logger.log(`${urls[i]}: HTTPエラー ${response.getResponseCode()}`);
+        return;
+      }
+      const feedText = response.getContentText().trim();
+      const document = XmlService.parse(feedText);
       const root = document.getRootElement();
       const channel = root.getChild('channel');
 
-      Logger.log("b");
-      if(channel === null) return;
+      if (channel === null) return;
       const items = channel.getChildren('item');
 
-      Logger.log("c");
-      const oneDayAgo = new Date();
-      oneDayAgo.setDate(oneDayAgo.getDate() - 1); // 過去24時間以内の記事のみを対象
-
-      Logger.log("d");
       items.forEach(item => {
         const title = item.getChildText('title');
         const rawDescription = item.getChildText('description') || '';
@@ -334,10 +341,8 @@ const fetchAndFilterRss = (urls, keywords) => {
           filtered.push({ title, description, link });
         }
       });
-      Logger.log("e");
     } catch (error) {
-      const message = 'fetchAndFilterRssでエラーが発生しました: ' + error.toString();
-      Logger.log(message);
+      Logger.log(`fetchAndFilterRssでエラーが発生しました(${urls[i]}): ` + error.toString());
     }
   });
 
