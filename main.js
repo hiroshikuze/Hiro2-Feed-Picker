@@ -48,6 +48,26 @@ const saveSentArticleUrls = (urls) => {
 };
 
 /**
+ * ネットワークエラーや5xxレスポンス時に指数バックオフでリトライするfetchラッパー。
+ * @param {string} url - リクエスト先URL。
+ * @param {Object} options - UrlFetchApp.fetchのオプション。
+ * @param {number} maxRetries - 最大試行回数（デフォルト3）。
+ * @returns {HTTPResponse} レスポンス。
+ */
+const fetchWithRetry = (url, options = {}, maxRetries = 3) => {
+  const opts = { ...options, muteHttpExceptions: true };
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = UrlFetchApp.fetch(url, opts);
+      if (res.getResponseCode() < 500 || i === maxRetries - 1) return res;
+    } catch (e) {
+      if (i === maxRetries - 1) throw e;
+    }
+    Utilities.sleep(1000 * Math.pow(2, i));
+  }
+};
+
+/**
  * メイン関数、RSSフィードから記事を取得し、フィルタリング、要約、LINE通知までの一連の処理を実行する
  */
 const main = () => {
@@ -276,25 +296,51 @@ const fetchAndFilterRss = (urls, keywords) => {
     return filtered;
   }
 
-  urls.forEach(url => {
+  const requests = urls.map(url => ({ url, muteHttpExceptions: true }));
+  let responses;
+  try {
+    responses = UrlFetchApp.fetchAll(requests);
+  } catch (error) {
+    Logger.log('fetchAll全体でエラーが発生しました: ' + error.toString());
+    return filtered;
+  }
+
+  // 失敗したURLだけ1回リトライ
+  const failedIndices = [];
+  responses.forEach((res, i) => {
     try {
-      Logger.log(`${url}:${keywords}`);
-      const feedText = UrlFetchApp.fetch(url).getContentText().trim();
-      Logger.log("a");
-      Logger.log(feedText);
-      const document = XmlService.parse(feedText); // 修正後のテキストをパース
+      if (res.getResponseCode() >= 400) failedIndices.push(i);
+    } catch (e) {
+      failedIndices.push(i);
+    }
+  });
+  if (failedIndices.length > 0) {
+    Utilities.sleep(1000);
+    try {
+      const retryResponses = UrlFetchApp.fetchAll(failedIndices.map(i => ({ url: urls[i], muteHttpExceptions: true })));
+      retryResponses.forEach((res, j) => { responses[failedIndices[j]] = res; });
+    } catch (e) {
+      Logger.log('リトライfetchAll全体でエラーが発生しました: ' + e.toString());
+    }
+  }
+
+  const oneDayAgo = new Date();
+  oneDayAgo.setDate(oneDayAgo.getDate() - 1); // 過去24時間以内の記事のみを対象
+
+  responses.forEach((response, i) => {
+    try {
+      if (response.getResponseCode() >= 400) {
+        Logger.log(`${urls[i]}: HTTPエラー ${response.getResponseCode()}`);
+        return;
+      }
+      const feedText = response.getContentText().trim();
+      const document = XmlService.parse(feedText);
       const root = document.getRootElement();
       const channel = root.getChild('channel');
 
-      Logger.log("b");
-      if(channel === null) return;
+      if (channel === null) return;
       const items = channel.getChildren('item');
 
-      Logger.log("c");
-      const oneDayAgo = new Date();
-      oneDayAgo.setDate(oneDayAgo.getDate() - 1); // 過去24時間以内の記事のみを対象
-
-      Logger.log("d");
       items.forEach(item => {
         const title = item.getChildText('title');
         const rawDescription = item.getChildText('description') || '';
@@ -314,10 +360,8 @@ const fetchAndFilterRss = (urls, keywords) => {
           filtered.push({ title, description, link });
         }
       });
-      Logger.log("e");
     } catch (error) {
-      const message = 'fetchAndFilterRssでエラーが発生しました: ' + error.toString();
-      Logger.log(message);
+      Logger.log(`fetchAndFilterRssでエラーが発生しました(${urls[i]}): ` + error.toString());
     }
   });
 
@@ -365,7 +409,7 @@ const getGeminiSummaryOfArticles = (articles) => {
     muteHttpExceptions: true
   };
 
-  const response = UrlFetchApp.fetch(API_URL, options);
+  const response = fetchWithRetry(API_URL, options);
   const json = JSON.parse(response.getContentText());
 
   Logger.log('token usage: ' + JSON.stringify(json.usageMetadata));
@@ -410,7 +454,7 @@ const sendLineNotification = (userIds, message) => {
   };
 
   Logger.log(options)
-  UrlFetchApp.fetch(LINE_API_URL, options);
+  fetchWithRetry(LINE_API_URL, options);
 };
 
 /**
