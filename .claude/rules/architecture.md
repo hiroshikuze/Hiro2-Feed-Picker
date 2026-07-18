@@ -7,7 +7,9 @@ main()
   ├── getRssUrlFromSheet()          // 「RSS」シートのB列からURL取得
   ├── getKeywordsFromSheet()        // 「keywords」シートのA列からキーワード取得
   ├── fetchAndFilterRss()           // RSSフェッチ（並列）＋キーワードフィルタリング
-  │     └── resolveRedirectUrl()   // Google News等のリダイレクトURLを実URLに解決
+  │     ├── fetchAllWithRetry()    // 並列フェッチ＋失敗分1回リトライ
+  │     └── filterRssItems()       // XMLパース＋キーワード/日付フィルタ
+  │           └── resolveRedirectUrl()  // Google News等のリダイレクトURLを実URLに解決
   ├── getSentArticleUrls()          // 送信済みURLをスクリプトプロパティから取得し重複除外
   ├── getGeminiSummaryOfArticles()  // Gemini APIで記事を要約（失敗時リトライあり）
   ├── getUserIdsFromSheet()         // 「userId」シートのA列からLINEユーザーID取得
@@ -44,7 +46,7 @@ main()
 
 ## Webhookエントリポイント
 
-`doPost(e)` がLINEからのWebhookを受け取る。友だち追加イベント時にユーザーIDを `userId` シートへ自動登録する。`appsscript.json` でウェブアプリとして `ANYONE_ANONYMOUS` 公開設定済み。
+`doPost(e)` がLINEからのWebhookを受け取る。イベント種別に関わらずすべてのWebhookイベントでuserIdを `userId` シートへ自動登録する（重複チェックあり）。`appsscript.json` でウェブアプリとして `ANYONE_ANONYMOUS` 公開設定済み。
 
 ## 重複排除
 
@@ -72,7 +74,7 @@ main()
 |----------|------------|
 | Gemini API | `fetchWithRetry()` で最大3回、1秒→2秒の指数バックオフ |
 | LINE送信 | `fetchWithRetry()` で最大3回、1秒→2秒の指数バックオフ（二重送信の可能性あり） |
-| RSSフィード取得 | `fetchAll` 後に失敗分だけ抽出して1秒待ちで1回リトライ |
+| RSSフィード取得 | `fetchAllWithRetry()` で並列フェッチ後、失敗分だけ1秒待ちで1回リトライ |
 | リダイレクト解決 | リトライなし（失敗時は元URLにフォールバック） |
 
 ## LINE出力のテキスト整形
