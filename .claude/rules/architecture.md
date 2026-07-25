@@ -83,4 +83,5 @@ Geminiのレスポンスに含まれるMarkdown記法をLINE向けに変換し�
 - `**bold**` → `"bold"`
 - `###` → `■`
 - `` `https://...` `` → `https://...`
-- `[text](https://...)` → `text https://...`（LINEはHTMLの`<a>`タグ相当の表現を持たず、本文に裸のURLを書いた場合のみ自動リンク化されるため）
+- `[text](https://...)` → `text\nhttps://...`（テキスト≠URLのとき2行に分けて出力。LINEはMarkdown非対応で裸のURLのみ自動リンク化されるため）
+- `[https://...](https://...)` → `https://...`（テキスト＝URLのとき重複を避けURLのみ出力）
