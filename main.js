@@ -255,17 +255,43 @@ const REDIRECT_URL_PATTERNS = [
   /^https:\/\/news\.google\.com\//,
 ];
 
-/**
- * リダイレクトURLを最終URLに解決する。パターン非該当のURLはそのまま返す。
- * @param {string} url - 元のURL。
- * @returns {string} リダイレクト先URL。解決できない場合は元のURLを返す。
- */
+const fetchGoogleNewsActualUrl = (articleId) => {
+  try {
+    const innerJson = '["garturlreq",[["en-US","US",["FINANCE_TOP_INDICES","WEB_TEST_1_0_0"],null,null,1,1,"US:en",null,180,null,null,null,null,null,0,null,null,[1608992183,723341000]],"en-US","US",1,[2,3,4,8],1,0,"655000234",0,0,null,0],"' + articleId + '"]';
+    const req = JSON.stringify([[['Fbv4je', innerJson, null, 'generic']]]);
+    const res = UrlFetchApp.fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je', {
+      method: 'post',
+      contentType: 'application/x-www-form-urlencoded;charset=utf-8',
+      headers: { Referer: 'https://news.google.com/' },
+      payload: 'f.req=' + encodeURIComponent(req),
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() !== 200) return null;
+    const text = res.getContentText();
+    const after = text.split('[\\\"garturlres\\\",\\\"')[1];
+    return after ? after.split('\\\",')[0] : null;
+  } catch (e) {
+    return null;
+  }
+};
+
 const resolveRedirectUrl = (url) => {
   if (!REDIRECT_URL_PATTERNS.some(pattern => pattern.test(url))) return url;
   try {
-    const res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true });
-    const headers = res.getHeaders();
-    return headers['Location'] || headers['location'] || url;
+    const match = url.match(/\/articles\/([^?]+)/);
+    if (!match) return url;
+    const articleId = match[1];
+    const pad = (4 - articleId.length % 4) % 4;
+    let bytes = Array.from(Utilities.base64DecodeWebSafe(articleId + '='.repeat(pad)));
+    if (bytes[0] === 8 && bytes[1] === 19 && bytes[2] === 34) bytes = bytes.slice(3);
+    const len = bytes.length;
+    if ((bytes[len - 3] & 0xFF) === 0xD2 && bytes[len - 2] === 1 && bytes[len - 1] === 0) bytes = bytes.slice(0, len - 3);
+    const length = bytes[0] & 0xFF;
+    const innerBytes = length >= 128 ? bytes.slice(2, length + 1) : bytes.slice(1, length + 1);
+    const innerStr = innerBytes.map(b => String.fromCharCode(b & 0xFF)).join('');
+    if (innerStr.startsWith('AU_yqL')) return fetchGoogleNewsActualUrl(articleId) || url;
+    if (innerStr.startsWith('http')) return innerStr;
+    return url;
   } catch (e) {
     return url;
   }
