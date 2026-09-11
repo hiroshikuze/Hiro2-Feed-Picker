@@ -510,4 +510,53 @@ const sendOwnerNotification = (message) => {
 
   Logger.log(message);
   sendLineNotification(LINE_OWNER_USER_ID, `🚨 Bot: ${message}`);
-}
+};
+
+/**
+ * Google News URLの解決アルゴリズムを手動テストする関数。
+ * GASエディターから直接実行し、結果をLINE（オーナー）とLogger.logで確認する。
+ * RSSシートのGoogle News URLを1件取得して resolveRedirectUrl() を実行する。
+ */
+const testGoogleNewsUrlResolution = () => {
+  try {
+    const urls = getRssUrlFromSheet();
+    const googleNewsUrls = urls.filter(u => /news\.google\.com/.test(u));
+    if (googleNewsUrls.length === 0) {
+      sendOwnerNotification('テスト失敗: RSSシートにGoogle News URLが見つかりません');
+      return;
+    }
+
+    // RSSフィードから記事URLを1件取得してテスト
+    const feedRes = UrlFetchApp.fetch(googleNewsUrls[0], { muteHttpExceptions: true });
+    if (feedRes.getResponseCode() !== 200) {
+      sendOwnerNotification(`テスト失敗: RSSフェッチエラー (${feedRes.getResponseCode()})`);
+      return;
+    }
+    const xml = XmlService.parse(feedRes.getContentText());
+    const items = xml.getRootElement().getChild('channel', xml.getRootElement().getNamespace())
+      ? xml.getRootElement().getChild('channel').getChildren('item')
+      : xml.getRootElement().getChildren('entry');
+    if (!items || items.length === 0) {
+      sendOwnerNotification('テスト失敗: RSSに記事が見つかりません');
+      return;
+    }
+
+    const item = items[0];
+    const link = item.getChildText('link') || (item.getChild('link') ? item.getChild('link').getAttribute('href').getValue() : null);
+    if (!link) {
+      sendOwnerNotification('テスト失敗: 記事URLが取得できません');
+      return;
+    }
+
+    Logger.log('元URL: ' + link);
+    const resolved = resolveRedirectUrl(link);
+    Logger.log('解決後URL: ' + resolved);
+
+    const result = resolved !== link
+      ? `✅ Google News URL解決成功\n元: ${link}\n→ ${resolved}`
+      : `⚠️ Google News URL未解決（フォールバック）\n元: ${link}`;
+    sendOwnerNotification(result);
+  } catch (e) {
+    sendOwnerNotification('testGoogleNewsUrlResolution エラー: ' + e.toString());
+  }
+};
