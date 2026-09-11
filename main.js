@@ -11,6 +11,9 @@
  */
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/multicast';
 const SENT_ARTICLE_URL_LIMIT = 100;
+const REDIRECT_URL_PATTERNS = [
+  /^https:\/\/news\.google\.com\//,
+];
 
 /**
  * プロジェクトの設定（スクリプトプロパティ）から指定されたキーの値を取得する。
@@ -136,16 +139,10 @@ const main = () => {
  */
 const doPost = (e) => {
   const json = JSON.parse(e.postData.contents);
-  const reply_token = json.events[0].replyToken;
+  if (!json.events || json.events.length === 0) return;
   const userId = json.events[0].source.userId;
 
-  // 検証で200を返すための取り組み
-  if (typeof reply_token === 'underfined') {
-    return;
-  }
-
   sendOwnerNotification(JSON.stringify(e));
-  // sendOwnerNotification(`reply_token:${reply_token}\nmessageId:${messageId}\nmessageType:${messageType}\nmessageText:${messageText}\userId:${userId}\n`);
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("userId");
@@ -153,15 +150,7 @@ const doPost = (e) => {
     throw new Error('「userId」シートが見つかりません。');
   }
   const values = sheet.getRange("A:A").getValues();
-  var isDuplicate = false;
-
-  // 既存の値と重複するか確認
-  for (var i = 0; i < values.length; i++) {
-    if (values[i][0] === userId) {
-      isDuplicate = true;
-      break;
-    }
-  }
+  const isDuplicate = values.some(row => row[0] === userId);
 
   // 重複しない場合のみ追加
   if (!isDuplicate) {
@@ -191,7 +180,7 @@ const getRssUrlFromSheet = () => {
   const rssUrls = values
     .map(row => String(row[0]).trim()) // 文字列に変換し、前後の空白を削除
     .filter(url => url !== ''); // 空のurlを除外
-  if (!rssUrls.length === 0) {
+  if (rssUrls.length === 0) {
     throw new Error('「RSS」シートにRSS URLが設定されていません。');
   }
   return rssUrls;
@@ -251,10 +240,11 @@ const getUserIdsFromSheet = () => {
   return uniqueUserIds;
 };
 
-const REDIRECT_URL_PATTERNS = [
-  /^https:\/\/news\.google\.com\//,
-];
-
+/**
+ * Google News記事IDからbatchexecute APIで実URLを取得する。
+ * @param {string} articleId - Google News URLパスの記事ID部分（CBMi...等）。
+ * @returns {string|null} 解決した実URL。失敗時はnull。
+ */
 const fetchGoogleNewsActualUrl = (articleId) => {
   try {
     const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
@@ -286,6 +276,11 @@ const fetchGoogleNewsActualUrl = (articleId) => {
   }
 };
 
+/**
+ * REDIRECT_URL_PATTERNSに一致するURLを実URLに解決する。解決失敗時は元のURLを返す。
+ * @param {string} url - 解決対象のURL。
+ * @returns {string} 解決後のURL（失敗時は元のURL）。
+ */
 const resolveRedirectUrl = (url) => {
   if (!REDIRECT_URL_PATTERNS.some(pattern => pattern.test(url))) return url;
   try {
@@ -357,7 +352,6 @@ const filterRssItems = (items, positiveKeywords, negativeKeywords, oneDayAgo) =>
     const title = item.getChildText('title');
     const rawDescription = item.getChildText('description') || '';
     const description = rawDescription.replace(/<[^>]*>/g, '').trim().slice(0, 150);
-    const link = resolveRedirectUrl(item.getChildText('link'));
     const pubDate = new Date(item.getChildText('pubDate'));
 
     if (pubDate < oneDayAgo) return;
@@ -367,6 +361,7 @@ const filterRssItems = (items, positiveKeywords, negativeKeywords, oneDayAgo) =>
     const isExcluded = negativeKeywords.some(keyword => content.includes(keyword.toLowerCase()));
 
     if (isMatch && !isExcluded) {
+      const link = resolveRedirectUrl(item.getChildText('link'));
       filtered.push({ title, description, link });
     }
   });
@@ -414,7 +409,7 @@ const fetchAndFilterRss = (urls, keywords) => {
 
 /**
  * Gemini APIを使用して記事をいい感じにまとめる。
- * @param {Array<{title: string, description: string, link: string}>} - フィルタリングされた記事の配列。
+ * @param {Array<{title: string, description: string, link: string}>} articles - フィルタリングされた記事の配列。
  * @returns {string} Geminiによってまとめた内容。
  */
 const getGeminiSummaryOfArticles = (articles) => {
@@ -497,7 +492,6 @@ const sendLineNotification = (userIds, message) => {
     muteHttpExceptions: true
   };
 
-  Logger.log(options)
   fetchWithRetry(LINE_API_URL, options);
 };
 
