@@ -11,6 +11,9 @@
  */
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/multicast';
 const SENT_ARTICLE_URL_LIMIT = 100;
+const REDIRECT_URL_PATTERNS = [
+  /^https:\/\/news\.google\.com\//,
+];
 
 /**
  * プロジェクトの設定（スクリプトプロパティ）から指定されたキーの値を取得する。
@@ -238,10 +241,6 @@ const getUserIdsFromSheet = () => {
 
   return uniqueUserIds;
 };
-
-const REDIRECT_URL_PATTERNS = [
-  /^https:\/\/news\.google\.com\//,
-];
 
 /**
  * Google News記事IDからbatchexecute APIで実URLを取得する。
