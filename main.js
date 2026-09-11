@@ -136,13 +136,9 @@ const main = () => {
  */
 const doPost = (e) => {
   const json = JSON.parse(e.postData.contents);
+  if (!json.events || json.events.length === 0) return;
   const reply_token = json.events[0].replyToken;
   const userId = json.events[0].source.userId;
-
-  // 検証で200を返すための取り組み
-  if (typeof reply_token === 'undefined') {
-    return;
-  }
 
   sendOwnerNotification(JSON.stringify(e));
   // sendOwnerNotification(`reply_token:${reply_token}\nmessageId:${messageId}\nmessageType:${messageType}\nmessageText:${messageText}\userId:${userId}\n`);
@@ -349,7 +345,6 @@ const filterRssItems = (items, positiveKeywords, negativeKeywords, oneDayAgo) =>
     const title = item.getChildText('title');
     const rawDescription = item.getChildText('description') || '';
     const description = rawDescription.replace(/<[^>]*>/g, '').trim().slice(0, 150);
-    const link = resolveRedirectUrl(item.getChildText('link'));
     const pubDate = new Date(item.getChildText('pubDate'));
 
     if (pubDate < oneDayAgo) return;
@@ -359,6 +354,7 @@ const filterRssItems = (items, positiveKeywords, negativeKeywords, oneDayAgo) =>
     const isExcluded = negativeKeywords.some(keyword => content.includes(keyword.toLowerCase()));
 
     if (isMatch && !isExcluded) {
+      const link = resolveRedirectUrl(item.getChildText('link'));
       filtered.push({ title, description, link });
     }
   });
