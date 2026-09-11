@@ -140,11 +140,9 @@ const main = () => {
 const doPost = (e) => {
   const json = JSON.parse(e.postData.contents);
   if (!json.events || json.events.length === 0) return;
-  const reply_token = json.events[0].replyToken;
   const userId = json.events[0].source.userId;
 
   sendOwnerNotification(JSON.stringify(e));
-  // sendOwnerNotification(`reply_token:${reply_token}\nmessageId:${messageId}\nmessageType:${messageType}\nmessageText:${messageText}\userId:${userId}\n`);
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("userId");
