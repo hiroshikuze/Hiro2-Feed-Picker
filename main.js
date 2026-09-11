@@ -255,17 +255,54 @@ const REDIRECT_URL_PATTERNS = [
   /^https:\/\/news\.google\.com\//,
 ];
 
-/**
- * リダイレクトURLを最終URLに解決する。パターン非該当のURLはそのまま返す。
- * @param {string} url - 元のURL。
- * @returns {string} リダイレクト先URL。解決できない場合は元のURLを返す。
- */
+const fetchGoogleNewsActualUrl = (articleId) => {
+  try {
+    const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
+    const pageRes = UrlFetchApp.fetch('https://news.google.com/articles/' + articleId, {
+      headers: { 'User-Agent': ua },
+      muteHttpExceptions: true,
+    });
+    if (pageRes.getResponseCode() !== 200) return null;
+    const html = pageRes.getContentText();
+    const sigMatch = html.match(/data-n-a-sg="([^"]+)"/);
+    const tsMatch = html.match(/data-n-a-ts="([^"]+)"/);
+    if (!sigMatch || !tsMatch) return null;
+    const inner = '["garturlreq",[["X","X",["X","X"],null,null,1,1,"US:en",null,1,null,null,null,null,null,0,1],"X","X",1,[1,1,1],1,1,null,0,0,null,0],"' + articleId + '",' + tsMatch[1] + ',"' + sigMatch[1] + '"]';
+    const batchRes = UrlFetchApp.fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute', {
+      method: 'post',
+      contentType: 'application/x-www-form-urlencoded;charset=UTF-8',
+      headers: { 'User-Agent': ua },
+      payload: 'f.req=' + encodeURIComponent(JSON.stringify([[['Fbv4je', inner]]])),
+      muteHttpExceptions: true,
+    });
+    if (batchRes.getResponseCode() !== 200) return null;
+    const parts = batchRes.getContentText().split('\n\n');
+    if (parts.length < 2) return null;
+    const events = JSON.parse(parts[1]);
+    if (!events[0] || !events[0][2]) return null;
+    return JSON.parse(events[0][2])[1] || null;
+  } catch (e) {
+    return null;
+  }
+};
+
 const resolveRedirectUrl = (url) => {
   if (!REDIRECT_URL_PATTERNS.some(pattern => pattern.test(url))) return url;
   try {
-    const res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true });
-    const headers = res.getHeaders();
-    return headers['Location'] || headers['location'] || url;
+    const match = url.match(/\/articles\/([^?]+)/);
+    if (!match) return url;
+    const articleId = match[1];
+    const pad = (4 - articleId.length % 4) % 4;
+    let bytes = Array.from(Utilities.base64DecodeWebSafe(articleId + '='.repeat(pad)));
+    if (bytes[0] === 8 && bytes[1] === 19 && bytes[2] === 34) bytes = bytes.slice(3);
+    const len = bytes.length;
+    if ((bytes[len - 3] & 0xFF) === 0xD2 && bytes[len - 2] === 1 && bytes[len - 1] === 0) bytes = bytes.slice(0, len - 3);
+    const length = bytes[0] & 0xFF;
+    const innerBytes = length >= 128 ? bytes.slice(2, length + 1) : bytes.slice(1, length + 1);
+    const innerStr = innerBytes.map(b => String.fromCharCode(b & 0xFF)).join('');
+    if (innerStr.startsWith('AU_yqL')) return fetchGoogleNewsActualUrl(articleId) || url;
+    if (innerStr.startsWith('http')) return innerStr;
+    return url;
   } catch (e) {
     return url;
   }
@@ -473,4 +510,53 @@ const sendOwnerNotification = (message) => {
 
   Logger.log(message);
   sendLineNotification(LINE_OWNER_USER_ID, `🚨 Bot: ${message}`);
-}
+};
+
+/**
+ * Google News URLの解決アルゴリズムを手動テストする関数。
+ * GASエディターから直接実行し、結果をLINE（オーナー）とLogger.logで確認する。
+ * RSSシートのGoogle News URLを1件取得して resolveRedirectUrl() を実行する。
+ */
+const testGoogleNewsUrlResolution = () => {
+  try {
+    const urls = getRssUrlFromSheet();
+    const googleNewsUrls = urls.filter(u => /news\.google\.com/.test(u));
+    if (googleNewsUrls.length === 0) {
+      sendOwnerNotification('テスト失敗: RSSシートにGoogle News URLが見つかりません');
+      return;
+    }
+
+    // RSSフィードから記事URLを1件取得してテスト
+    const feedRes = UrlFetchApp.fetch(googleNewsUrls[0], { muteHttpExceptions: true });
+    if (feedRes.getResponseCode() !== 200) {
+      sendOwnerNotification(`テスト失敗: RSSフェッチエラー (${feedRes.getResponseCode()})`);
+      return;
+    }
+    const xml = XmlService.parse(feedRes.getContentText());
+    const items = xml.getRootElement().getChild('channel', xml.getRootElement().getNamespace())
+      ? xml.getRootElement().getChild('channel').getChildren('item')
+      : xml.getRootElement().getChildren('entry');
+    if (!items || items.length === 0) {
+      sendOwnerNotification('テスト失敗: RSSに記事が見つかりません');
+      return;
+    }
+
+    const item = items[0];
+    const link = item.getChildText('link') || (item.getChild('link') ? item.getChild('link').getAttribute('href').getValue() : null);
+    if (!link) {
+      sendOwnerNotification('テスト失敗: 記事URLが取得できません');
+      return;
+    }
+
+    Logger.log('元URL: ' + link);
+    const resolved = resolveRedirectUrl(link);
+    Logger.log('解決後URL: ' + resolved);
+
+    const result = resolved !== link
+      ? `✅ Google News URL解決成功\n元: ${link}\n→ ${resolved}`
+      : `⚠️ Google News URL未解決（フォールバック）\n元: ${link}`;
+    sendOwnerNotification(result);
+  } catch (e) {
+    sendOwnerNotification('testGoogleNewsUrlResolution エラー: ' + e.toString());
+  }
+};
