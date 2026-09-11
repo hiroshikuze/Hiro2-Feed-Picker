@@ -72,7 +72,11 @@ main()
 2. Base64デコードして内部バイト列を解析
    - 旧形式：デコード結果に実URLが含まれる → そのまま返す
    - 新形式（`AU_yqL` プレフィックス）：`fetchGoogleNewsActualUrl()` で batchexecute API を呼び出す
-3. `fetchGoogleNewsActualUrl()`: Google の内部 API `/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je` に POST して実URLを取得
+3. `fetchGoogleNewsActualUrl()`:
+   1. `https://news.google.com/articles/{articleId}` を GET して HTML を取得
+   2. `data-n-a-sg`（signature）・`data-n-a-ts`（timestamp）を正規表現で抽出
+   3. `/_/DotsSplashUi/data/batchexecute` に signature・timestamp・articleId を含む POST リクエスト
+   4. レスポンス JSON から実URLを取得
 
 > **注意**: batchexecute はドキュメント化されていない内部 API のため、Google の仕様変更で動作しなくなる可能性がある。その場合はフォールバックにより元の Google News URL が送信される。
 

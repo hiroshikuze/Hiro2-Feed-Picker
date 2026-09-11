@@ -257,19 +257,30 @@ const REDIRECT_URL_PATTERNS = [
 
 const fetchGoogleNewsActualUrl = (articleId) => {
   try {
-    const innerJson = '["garturlreq",[["en-US","US",["FINANCE_TOP_INDICES","WEB_TEST_1_0_0"],null,null,1,1,"US:en",null,180,null,null,null,null,null,0,null,null,[1608992183,723341000]],"en-US","US",1,[2,3,4,8],1,0,"655000234",0,0,null,0],"' + articleId + '"]';
-    const req = JSON.stringify([[['Fbv4je', innerJson, null, 'generic']]]);
-    const res = UrlFetchApp.fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je', {
-      method: 'post',
-      contentType: 'application/x-www-form-urlencoded;charset=utf-8',
-      headers: { Referer: 'https://news.google.com/' },
-      payload: 'f.req=' + encodeURIComponent(req),
+    const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
+    const pageRes = UrlFetchApp.fetch('https://news.google.com/articles/' + articleId, {
+      headers: { 'User-Agent': ua },
       muteHttpExceptions: true,
     });
-    if (res.getResponseCode() !== 200) return null;
-    const text = res.getContentText();
-    const after = text.split('[\\\"garturlres\\\",\\\"')[1];
-    return after ? after.split('\\\",')[0] : null;
+    if (pageRes.getResponseCode() !== 200) return null;
+    const html = pageRes.getContentText();
+    const sigMatch = html.match(/data-n-a-sg="([^"]+)"/);
+    const tsMatch = html.match(/data-n-a-ts="([^"]+)"/);
+    if (!sigMatch || !tsMatch) return null;
+    const inner = '["garturlreq",[["X","X",["X","X"],null,null,1,1,"US:en",null,1,null,null,null,null,null,0,1],"X","X",1,[1,1,1],1,1,null,0,0,null,0],"' + articleId + '",' + tsMatch[1] + ',"' + sigMatch[1] + '"]';
+    const batchRes = UrlFetchApp.fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute', {
+      method: 'post',
+      contentType: 'application/x-www-form-urlencoded;charset=UTF-8',
+      headers: { 'User-Agent': ua },
+      payload: 'f.req=' + encodeURIComponent(JSON.stringify([[['Fbv4je', inner]]])),
+      muteHttpExceptions: true,
+    });
+    if (batchRes.getResponseCode() !== 200) return null;
+    const parts = batchRes.getContentText().split('\n\n');
+    if (parts.length < 2) return null;
+    const events = JSON.parse(parts[1]);
+    if (!events[0] || !events[0][2]) return null;
+    return JSON.parse(events[0][2])[1] || null;
   } catch (e) {
     return null;
   }
