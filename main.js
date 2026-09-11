@@ -243,6 +243,11 @@ const REDIRECT_URL_PATTERNS = [
   /^https:\/\/news\.google\.com\//,
 ];
 
+/**
+ * Google News記事IDからbatchexecute APIで実URLを取得する。
+ * @param {string} articleId - Google News URLパスの記事ID部分（CBMi...等）。
+ * @returns {string|null} 解決した実URL。失敗時はnull。
+ */
 const fetchGoogleNewsActualUrl = (articleId) => {
   try {
     const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
@@ -274,6 +279,11 @@ const fetchGoogleNewsActualUrl = (articleId) => {
   }
 };
 
+/**
+ * REDIRECT_URL_PATTERNSに一致するURLを実URLに解決する。解決失敗時は元のURLを返す。
+ * @param {string} url - 解決対象のURL。
+ * @returns {string} 解決後のURL（失敗時は元のURL）。
+ */
 const resolveRedirectUrl = (url) => {
   if (!REDIRECT_URL_PATTERNS.some(pattern => pattern.test(url))) return url;
   try {
@@ -402,7 +412,7 @@ const fetchAndFilterRss = (urls, keywords) => {
 
 /**
  * Gemini APIを使用して記事をいい感じにまとめる。
- * @param {Array<{title: string, description: string, link: string}>} - フィルタリングされた記事の配列。
+ * @param {Array<{title: string, description: string, link: string}>} articles - フィルタリングされた記事の配列。
  * @returns {string} Geminiによってまとめた内容。
  */
 const getGeminiSummaryOfArticles = (articles) => {
