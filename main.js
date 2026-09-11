@@ -140,7 +140,7 @@ const doPost = (e) => {
   const userId = json.events[0].source.userId;
 
   // 検証で200を返すための取り組み
-  if (typeof reply_token === 'underfined') {
+  if (typeof reply_token === 'undefined') {
     return;
   }
 
@@ -153,15 +153,7 @@ const doPost = (e) => {
     throw new Error('「userId」シートが見つかりません。');
   }
   const values = sheet.getRange("A:A").getValues();
-  var isDuplicate = false;
-
-  // 既存の値と重複するか確認
-  for (var i = 0; i < values.length; i++) {
-    if (values[i][0] === userId) {
-      isDuplicate = true;
-      break;
-    }
-  }
+  const isDuplicate = values.some(row => row[0] === userId);
 
   // 重複しない場合のみ追加
   if (!isDuplicate) {
@@ -191,7 +183,7 @@ const getRssUrlFromSheet = () => {
   const rssUrls = values
     .map(row => String(row[0]).trim()) // 文字列に変換し、前後の空白を削除
     .filter(url => url !== ''); // 空のurlを除外
-  if (!rssUrls.length === 0) {
+  if (rssUrls.length === 0) {
     throw new Error('「RSS」シートにRSS URLが設定されていません。');
   }
   return rssUrls;
@@ -497,7 +489,6 @@ const sendLineNotification = (userIds, message) => {
     muteHttpExceptions: true
   };
 
-  Logger.log(options)
   fetchWithRetry(LINE_API_URL, options);
 };
 
