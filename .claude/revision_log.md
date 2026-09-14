@@ -20,6 +20,12 @@
 - **なぜ起きたか**: 既存コードのtypoを「意図的な命名」と誤解した
 - **次回の対策**: 関数名・変数名に違和感があれば既存コードをGrep確認し、typoか意図的かを判断してから記録する
 
+## 2026-09-14
+- **ミスの種類**: batchexecute実装の初回誤り
+- **何が起きたか**: fetchGoogleNewsActualUrl() の初回実装でsignature/timestampを取得しない旧形式のbatchexecuteリクエストを送り、`[3]`エラーが返った
+- **なぜ起きたか**: gnewsdecoderライブラリの2ステップ方式（記事ページGET→batchexecute POST）を事前確認せず、古い情報をもとに実装した
+- **次回の対策**: 未ドキュメントAPIを実装する前に、既存のOSSライブラリ実装（今回はnew_decoderv2.py）を必ず先に参照してから実装する
+
 ## 2026-06-13
 - **ミスの種類**: モデル名の誤読・誤った前提に基づく実装
 - **何が起きたか**: 請求書のSKU名「Generate content output token count gemini 3.5 flash text」を、`main.js` が使用する `gemini-2.5-flash` の表記揚れだと推測し、検証せずに `thinkingConfig: { thinkingBudget: 0 }` を実装・デプロイした。実際には「Gemini 3.5 Flash」は別の実在モデルで、`main.js` では一切呼び出されておらず、本来のコスト主因とは無関係だった。
