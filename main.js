@@ -11,6 +11,7 @@
  */
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/multicast';
 const SENT_ARTICLE_URL_LIMIT = 100;
+const VERSION = '20260919';
 const REDIRECT_URL_PATTERNS = [
   /^https:\/\/news\.google\.com\//,
 ];
@@ -89,7 +90,8 @@ const main = () => {
       sendOwnerNotification('「キーワード」シートに通知キーワードが設定されていません。処理を中断します。');
       return;
     }
-    Logger.log("1:OK");
+    const startTime = Date.now();
+    Logger.log("1:OK v" + VERSION);
 
     // 2. RSSフィードの取得とフィルタリング
     const filteredArticles = fetchAndFilterRss(rssUrls, targetKeywords);
@@ -99,7 +101,7 @@ const main = () => {
       Logger.log('該当する新しい記事はありませんでした。');
       return;
     }
-    Logger.log("2:OK");
+    Logger.log("2:OK " + filteredArticles.length + "件 " + Math.round((Date.now() - startTime) / 1000) + "秒経過");
 
     // 送信済みURLを除外
     const sentUrls = new Set(getSentArticleUrls());
@@ -311,12 +313,14 @@ const resolveRedirectUrl = (url) => {
 const fetchAllWithRetry = (urls) => {
   const requests = urls.map(url => ({ url, muteHttpExceptions: true }));
   let responses;
+  const tFetch = Date.now();
   try {
     responses = UrlFetchApp.fetchAll(requests);
   } catch (error) {
     Logger.log('fetchAll全体でエラーが発生しました: ' + error.toString());
     return urls.map(() => null);
   }
+  Logger.log("2a-1:初回RSS取得完了 " + Math.round((Date.now() - tFetch) / 1000) + "秒");
 
   const failedIndices = [];
   responses.forEach((res, i) => {
@@ -327,13 +331,16 @@ const fetchAllWithRetry = (urls) => {
     }
   });
   if (failedIndices.length > 0) {
+    Logger.log("2a-2:リトライ対象 " + failedIndices.length + "件");
     Utilities.sleep(1000);
+    const tRetry = Date.now();
     try {
       const retryResponses = UrlFetchApp.fetchAll(failedIndices.map(i => ({ url: urls[i], muteHttpExceptions: true })));
       retryResponses.forEach((res, j) => { responses[failedIndices[j]] = res; });
     } catch (e) {
       Logger.log('リトライfetchAll全体でエラーが発生しました: ' + e.toString());
     }
+    Logger.log("2a-3:リトライ完了 " + Math.round((Date.now() - tRetry) / 1000) + "秒");
   }
   return responses;
 };
@@ -385,7 +392,9 @@ const fetchAndFilterRss = (urls, keywords) => {
     return [];
   }
 
+  const t0 = Date.now();
   const responses = fetchAllWithRetry(urls);
+  Logger.log("2a:RSS取得完了 " + Math.round((Date.now() - t0) / 1000) + "秒");
   const oneDayAgo = new Date();
   oneDayAgo.setDate(oneDayAgo.getDate() - 1);
   const filtered = [];
