@@ -11,6 +11,7 @@
  */
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/multicast';
 const SENT_ARTICLE_URL_LIMIT = 100;
+const VERSION = '20260919';
 const REDIRECT_URL_PATTERNS = [
   /^https:\/\/news\.google\.com\//,
 ];
@@ -89,7 +90,8 @@ const main = () => {
       sendOwnerNotification('「キーワード」シートに通知キーワードが設定されていません。処理を中断します。');
       return;
     }
-    Logger.log("1:OK");
+    const startTime = Date.now();
+    Logger.log("1:OK v" + VERSION);
 
     // 2. RSSフィードの取得とフィルタリング
     const filteredArticles = fetchAndFilterRss(rssUrls, targetKeywords);
@@ -99,7 +101,7 @@ const main = () => {
       Logger.log('該当する新しい記事はありませんでした。');
       return;
     }
-    Logger.log("2:OK");
+    Logger.log("2:OK " + filteredArticles.length + "件 " + Math.round((Date.now() - startTime) / 1000) + "秒経過");
 
     // 送信済みURLを除外
     const sentUrls = new Set(getSentArticleUrls());
@@ -385,7 +387,9 @@ const fetchAndFilterRss = (urls, keywords) => {
     return [];
   }
 
+  const t0 = Date.now();
   const responses = fetchAllWithRetry(urls);
+  Logger.log("2a:RSS取得完了 " + Math.round((Date.now() - t0) / 1000) + "秒");
   const oneDayAgo = new Date();
   oneDayAgo.setDate(oneDayAgo.getDate() - 1);
   const filtered = [];
