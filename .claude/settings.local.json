@@ -31,7 +31,8 @@
       "Bash(xargs -I{} grep -l \"stop-hook-git-check\\\\|3b3bc643\\\\|Hiro2-Feed-Picker\" {})",
       "Bash(ls -lt /home/hiroshikuze/.claude/debug/*.txt)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git pull *)"
     ]
   }
 }
