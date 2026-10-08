@@ -254,11 +254,18 @@ const fetchGoogleNewsActualUrl = (articleId) => {
       headers: { 'User-Agent': ua },
       muteHttpExceptions: true,
     });
-    if (pageRes.getResponseCode() !== 200) return null;
+    const pageStatus = pageRes.getResponseCode();
+    if (pageStatus !== 200) {
+      Logger.log('fetchGoogleNewsActualUrl: 記事ページ取得失敗 status=' + pageStatus);
+      return null;
+    }
     const html = pageRes.getContentText();
     const sigMatch = html.match(/data-n-a-sg="([^"]+)"/);
     const tsMatch = html.match(/data-n-a-ts="([^"]+)"/);
-    if (!sigMatch || !tsMatch) return null;
+    if (!sigMatch || !tsMatch) {
+      Logger.log('fetchGoogleNewsActualUrl: data-n-a-sg/ts 未検出（CAPTCHAまたはHTML構造変更の可能性）html先頭=' + html.substring(0, 200));
+      return null;
+    }
     const inner = '["garturlreq",[["X","X",["X","X"],null,null,1,1,"US:en",null,1,null,null,null,null,null,0,1],"X","X",1,[1,1,1],1,1,null,0,0,null,0],"' + articleId + '",' + tsMatch[1] + ',"' + sigMatch[1] + '"]';
     const batchRes = UrlFetchApp.fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute', {
       method: 'post',
@@ -267,13 +274,24 @@ const fetchGoogleNewsActualUrl = (articleId) => {
       payload: 'f.req=' + encodeURIComponent(JSON.stringify([[['Fbv4je', inner]]])),
       muteHttpExceptions: true,
     });
-    if (batchRes.getResponseCode() !== 200) return null;
+    const batchStatus = batchRes.getResponseCode();
+    if (batchStatus !== 200) {
+      Logger.log('fetchGoogleNewsActualUrl: batchexecute失敗 status=' + batchStatus);
+      return null;
+    }
     const parts = batchRes.getContentText().split('\n\n');
-    if (parts.length < 2) return null;
+    if (parts.length < 2) {
+      Logger.log('fetchGoogleNewsActualUrl: batchexecuteレスポンス形式不正 parts=' + parts.length);
+      return null;
+    }
     const events = JSON.parse(parts[1]);
-    if (!events[0] || !events[0][2]) return null;
+    if (!events[0] || !events[0][2]) {
+      Logger.log('fetchGoogleNewsActualUrl: batchexecuteレスポンスにURLなし events=' + JSON.stringify(events[0]));
+      return null;
+    }
     return JSON.parse(events[0][2])[1] || null;
   } catch (e) {
+    Logger.log('fetchGoogleNewsActualUrl: 例外 ' + e.message);
     return null;
   }
 };
