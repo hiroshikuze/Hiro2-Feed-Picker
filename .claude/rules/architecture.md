@@ -11,6 +11,7 @@ main()
   │     └── filterRssItems()       // XMLパース＋キーワード/日付フィルタ
   │           └── resolveRedirectUrl()  // Google News等のリダイレクトURLを実URLに解決
   │                 └── fetchGoogleNewsActualUrl()  // batchexecute APIで実URLを取得（AU_yqL形式）
+  │                       └── fetchGoogleNewsParams()  // 記事ページからsignature/timestampを取得（429は1回再試行）
   ├── getSentArticleUrls()          // 送信済みURLをスクリプトプロパティから取得し重複除外
   ├── getGeminiSummaryOfArticles()  // Gemini APIで記事を要約（失敗時リトライあり）
   ├── getUserIdsFromSheet()         // 「userId」シートのA列からLINEユーザーID取得
@@ -73,7 +74,7 @@ main()
    - 旧形式：デコード結果に実URLが含まれる → そのまま返す
    - 新形式（`AU_yqL` プレフィックス）：`fetchGoogleNewsActualUrl()` で batchexecute API を呼び出す
 3. `fetchGoogleNewsActualUrl()`:
-   1. `https://news.google.com/articles/{articleId}` を GET して HTML を取得
+   1. `fetchGoogleNewsParams()` が `https://news.google.com/rss/articles/{articleId}` を GET して HTML を取得（失敗時は `https://news.google.com/articles/{articleId}` を試す。HTTP 429 のときは各URLで2秒待って1回だけ再試行）
    2. `data-n-a-sg`（signature）・`data-n-a-ts`（timestamp）を正規表現で抽出
    3. `/_/DotsSplashUi/data/batchexecute` に signature・timestamp・articleId を含む POST リクエスト
    4. レスポンス JSON から実URLを取得
@@ -89,6 +90,7 @@ main()
 | Gemini API | `fetchWithRetry()` で最大3回、1秒→2秒の指数バックオフ |
 | LINE送信 | `fetchWithRetry()` で最大3回、1秒→2秒の指数バックオフ（二重送信の可能性あり） |
 | RSSフィード取得 | `fetchAllWithRetry()` で並列フェッチ後、失敗分だけ1秒待ちで1回リトライ |
+| リダイレクト解決（記事ページ取得） | `fetchGoogleNewsParams()` でHTTP 429のときのみ2秒待って1回再試行（Googleのレート制限対策）。それでも失敗なら元URLにフォールバック |
 | リダイレクト解決（batchexecute） | リトライなし（失敗時は元URLにフォールバック） |
 
 ## LINE出力のテキスト整形
