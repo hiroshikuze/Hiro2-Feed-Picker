@@ -11,7 +11,7 @@
  */
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/multicast';
 const SENT_ARTICLE_URL_LIMIT = 100;
-const VERSION = '20261011';
+const VERSION = '20261012';
 const REDIRECT_URL_PATTERNS = [
   /^https:\/\/news\.google\.com\//,
 ];
@@ -243,6 +243,38 @@ const getUserIdsFromSheet = () => {
 };
 
 /**
+ * Google News記事ページから batchexecute に必要な signature / timestamp を取得する。
+ * rss/articles 経路を先に試し、失敗したら articles 経路を試す。HTTP 429 のときは各経路で1回だけ再試行する。
+ * @param {string} articleId - Google News URLパスの記事ID部分（CBMi...等）。
+ * @param {string} ua - User-Agent。
+ * @returns {{signature: string, timestamp: string}|null} 取得結果。失敗時はnull。
+ */
+const fetchGoogleNewsParams = (articleId, ua) => {
+  const pageUrls = [
+    'https://news.google.com/rss/articles/' + articleId,
+    'https://news.google.com/articles/' + articleId,
+  ];
+  for (const pageUrl of pageUrls) {
+    let res = UrlFetchApp.fetch(pageUrl, { headers: { 'User-Agent': ua }, muteHttpExceptions: true });
+    if (res.getResponseCode() === 429) {
+      Utilities.sleep(2000);
+      res = UrlFetchApp.fetch(pageUrl, { headers: { 'User-Agent': ua }, muteHttpExceptions: true });
+    }
+    const status = res.getResponseCode();
+    if (status !== 200) {
+      Logger.log('fetchGoogleNewsParams: 記事ページ取得失敗 status=' + status + ' url=' + pageUrl.replace(articleId, '{id}'));
+      continue;
+    }
+    const html = res.getContentText();
+    const sigMatch = html.match(/data-n-a-sg="([^"]+)"/);
+    const tsMatch = html.match(/data-n-a-ts="([^"]+)"/);
+    if (sigMatch && tsMatch) return { signature: sigMatch[1], timestamp: tsMatch[1] };
+    Logger.log('fetchGoogleNewsParams: data-n-a-sg/ts 未検出（CAPTCHAまたはHTML構造変更の可能性）url=' + pageUrl.replace(articleId, '{id}') + ' html先頭=' + html.substring(0, 200));
+  }
+  return null;
+};
+
+/**
  * Google News記事IDからbatchexecute APIで実URLを取得する。
  * @param {string} articleId - Google News URLパスの記事ID部分（CBMi...等）。
  * @returns {string|null} 解決した実URL。失敗時はnull。
@@ -250,23 +282,9 @@ const getUserIdsFromSheet = () => {
 const fetchGoogleNewsActualUrl = (articleId) => {
   try {
     const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
-    const pageRes = UrlFetchApp.fetch('https://news.google.com/articles/' + articleId, {
-      headers: { 'User-Agent': ua },
-      muteHttpExceptions: true,
-    });
-    const pageStatus = pageRes.getResponseCode();
-    if (pageStatus !== 200) {
-      Logger.log('fetchGoogleNewsActualUrl: 記事ページ取得失敗 status=' + pageStatus);
-      return null;
-    }
-    const html = pageRes.getContentText();
-    const sigMatch = html.match(/data-n-a-sg="([^"]+)"/);
-    const tsMatch = html.match(/data-n-a-ts="([^"]+)"/);
-    if (!sigMatch || !tsMatch) {
-      Logger.log('fetchGoogleNewsActualUrl: data-n-a-sg/ts 未検出（CAPTCHAまたはHTML構造変更の可能性）html先頭=' + html.substring(0, 200));
-      return null;
-    }
-    const inner = '["garturlreq",[["X","X",["X","X"],null,null,1,1,"US:en",null,1,null,null,null,null,null,0,1],"X","X",1,[1,1,1],1,1,null,0,0,null,0],"' + articleId + '",' + tsMatch[1] + ',"' + sigMatch[1] + '"]';
+    const params = fetchGoogleNewsParams(articleId, ua);
+    if (!params) return null;
+    const inner = '["garturlreq",[["X","X",["X","X"],null,null,1,1,"US:en",null,1,null,null,null,null,null,0,1],"X","X",1,[1,1,1],1,1,null,0,0,null,0],"' + articleId + '",' + params.timestamp + ',"' + params.signature + '"]';
     const batchRes = UrlFetchApp.fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute', {
       method: 'post',
       contentType: 'application/x-www-form-urlencoded;charset=UTF-8',
