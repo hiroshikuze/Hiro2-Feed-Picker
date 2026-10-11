@@ -11,7 +11,7 @@
  */
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/multicast';
 const SENT_ARTICLE_URL_LIMIT = 100;
-const VERSION = '20260919';
+const VERSION = '20261011';
 const REDIRECT_URL_PATTERNS = [
   /^https:\/\/news\.google\.com\//,
 ];
@@ -289,7 +289,12 @@ const fetchGoogleNewsActualUrl = (articleId) => {
       Logger.log('fetchGoogleNewsActualUrl: batchexecuteレスポンスにURLなし events=' + JSON.stringify(events[0]));
       return null;
     }
-    return JSON.parse(events[0][2])[1] || null;
+    const actualUrl = JSON.parse(events[0][2])[1];
+    if (!actualUrl) {
+      Logger.log('fetchGoogleNewsActualUrl: 実URLが空 events[0][2]=' + String(events[0][2]).substring(0, 200));
+      return null;
+    }
+    return actualUrl;
   } catch (e) {
     Logger.log('fetchGoogleNewsActualUrl: 例外 ' + e.message);
     return null;
@@ -569,7 +574,7 @@ const testGoogleNewsUrlResolution = () => {
       return;
     }
 
-    Logger.log('元URL: ' + link);
+    Logger.log('v' + VERSION + ' 元URL: ' + link);
     const resolved = resolveRedirectUrl(link);
     Logger.log('解決後URL: ' + resolved);
 
